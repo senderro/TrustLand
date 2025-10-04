@@ -1,11 +1,2 @@
 // src/lib/wagmi.ts
-import { createConfig, http } from 'wagmi';
-import { sepolia } from 'wagmi/chains';
-import { injected } from 'wagmi/connectors';
-
-export const wagmiConfig = createConfig({
-  chains: [sepolia],
-  connectors: [injected()],
-  transports: { [sepolia.id]: http() }, // ou http(process.env.NEXT_PUBLIC_SEPOLIA_RPC!)
-  ssr: true,
-});
+export { wagmiConfig } from './web3/config';

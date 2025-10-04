@@ -1,0 +1,115 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL") // defaults to "file:./dev.db"
+}
+
+model Usuario {
+  id          String         @id @default(cuid())
+  nome        String
+  carteira    String         @unique
+  tipo        String         // TOMADOR | APOIADOR | OPERADOR | PROVEDOR
+  score       Int            @default(50)   // 0–100
+  status      String         @default("ATIVO") // ATIVO | SOB_REVISAO | BLOQUEADO
+  createdAt   DateTime       @default(now())
+  emprestimos Emprestimo[]   @relation("Tomador")
+  endossos    Endosso[]
+  flagsFraude FlagFraude[]
+}
+
+// SQLite doesn't support enums, so we use String with constraints
+// enum UsuarioTipo: TOMADOR | APOIADOR | OPERADOR | PROVEDOR
+// enum UsuarioStatus: ATIVO | SOB_REVISAO | BLOQUEADO
+
+model Emprestimo {
+  id            String            @id @default(cuid())
+  tomadorId     String
+  tomador       Usuario           @relation("Tomador", fields: [tomadorId], references: [id])
+  valorTotal    Int               // microUSDC
+  taxaAnualBps  Int               // ex. 1400 = 14% a.a.
+  prazoParcelas Int
+  estado        String            @default("PENDENTE") // PENDENTE | APROVADO | ATIVO | QUITADO | INADIMPLENTE | LIQUIDADO_INADIMPLENCIA
+  dataInicio    DateTime?
+  dataFim       DateTime?
+  colateral     Int               @default(0)
+  valorPago     Int               @default(0)
+  hashRegras    String
+  parcelas      Parcela[]
+  endossos      Endosso[]
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+}
+
+// enum EstadoEmprestimo: PENDENTE | APROVADO | ATIVO | QUITADO | INADIMPLENTE | LIQUIDADO_INADIMPLENCIA
+
+model Parcela {
+  emprestimoId String
+  emprestimo   Emprestimo    @relation(fields: [emprestimoId], references: [id])
+  indice       Int
+  valor        Int           // microusDC
+  dueAt        DateTime
+  status        String            @default("ABERTA") // ABERTA | PAGA | ATRASADA
+  paidAt       DateTime?
+  
+  @@unique([emprestimoId, indice])
+}
+
+// enum StatusParcela: ABERTA | PAGA | ATRASADA
+
+model Endosso {
+  id            String        @id @default(cuid())
+  emprestimoId  String
+  emprestimo    Emprestimo    @relation(fields: [emprestimoId], references: [id])
+  apoiadorId    String
+  apoiador      Usuario       @relation(fields: [apoiadorId], references: [id])
+  valorStake    Int           // microusDC
+  status        String            @default("PENDENTE") // PENDENTE | ATIVO | LIBERADO | CORTADO // PENDENTE até aprovação do loan
+  dataBloqueio  DateTime?
+  dataLiberacao DateTime?
+  createdAt     DateTime      @default(now())
+}
+
+// enum StatusEndosso: PENDENTE | ATIVO | LIBERADO | CORTADO
+
+model Evento {
+  id             String     @id @default(cuid())
+  tipo          String // CRIACAO | APOIO | SCORE_RECALC | APROVACAO | DESEMBOLSO | PAGAMENTO | ATRASO | DEFAULT | WATERFALL | LIBERACAO
+  referenciaId   String
+  detalhes       String     // JSON
+  timestamp      DateTime   @default(now())
+  idempotencyKey String     @unique
+}
+// enum TipoEvento: CRIACAO | APOIO | SCORE_RECALC | APROVACAO | DESEMBOLSO | PAGAMENTO | ATRASO | DEFAULT | WATERFALL | LIBERACAO
+
+model FlagFraude {
+  id        String   @id @default(cuid())
+  usuarioId String
+  usuario   Usuario  @relation(fields: [usuarioId], references: [id])
+  tipo      String
+  createdAt DateTime @default(now())
+  revisado  Boolean  @default(false)
+  resultado String?  // CONFIRMADO | REVERTIDO
+}
+
+model ParametrosSistema {
+  versao           String   @id
+  tabelaPricing    String   // JSON (faixas/limites)
+  toleranciaAtraso Int      // em segundos simulação
+  tempoParcelaS    Int      // ex. 10s
+  createdAt        DateTime @default(now())
+}
+
+model LogsDeDecisao {
+  id           String   @id @default(cuid())
+  emprestimoId String?
+  inputDados   String
+  resultado    String
+  hashDecisao  String   @unique
+  createdAt    DateTime @default(now())
+}
