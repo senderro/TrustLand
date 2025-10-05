@@ -6,7 +6,7 @@ import { createApiResponse, createApiError } from '@/lib/api';
 import { EventManager, EventHelpers } from '@/lib/infra/events';
 import { DecisionLogger } from '@/lib/infra/logger';
 import { Repository } from '@/lib/infra/repo';
-import { FraudDetector } from '@/lib/domain/fraud';
+import { FraudDetector, UserInfo } from '@/lib/domain/fraud';
 
 const prisma = new PrismaClient();
 const eventManager = new EventManager(prisma);
@@ -32,7 +32,13 @@ export async function POST(request: NextRequest) {
 
     // Run fraud detection for new users
     const users = await prisma.usuario.findMany();
-    const fraudAlert = FraudDetector.detectMultiAccount(users, user.id);
+    const userInfos: UserInfo[] = users.map(u => ({
+      id: u.id,
+      carteira: u.carteira,
+      createdAt: u.createdAt,
+      tipo: u.tipo as 'TOMADOR' | 'APOIADOR' | 'OPERADOR' | 'PROVEDOR'
+    }));
+    const fraudAlert = FraudDetector.detectMultiAccount(userInfos, user.id);
     
     if (fraudAlert) {
       await repository.createFraudFlag({

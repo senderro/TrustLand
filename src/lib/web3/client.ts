@@ -1,7 +1,23 @@
-import { createPublicClient, createWalletClient, http, parseEther, parseUnits, formatUnits } from 'viem';
+import { createPublicClient, createWalletClient, http, parseEther, parseUnits, formatUnits, PublicClient } from 'viem';
 import { sepolia } from 'viem/chains';
 import { privateKeyToAccount } from 'viem/accounts';
-import { RPC_CONFIG, CONTRACTS, USDC_DECIMALS, MOCK_MODE } from './config';
+// Import only the non-wagmi config to avoid circular dependencies
+const CONTRACTS = {
+  USDC: process.env.NEXT_PUBLIC_USDC_ADDRESS || '0x0000000000000000000000000000000000000000',
+  MVP: process.env.NEXT_PUBLIC_MVP_ADDRESS || '0x0000000000000000000000000000000000000000',
+} as const;
+
+const RPC_CONFIG = {
+  sepolia: {
+    rpcUrl: process.env.SEPOLIA_RPC_URL || 'https://sepolia.infura.io/v3/YOUR-PROJECT-ID',
+    blockExplorer: 'https://sepolia.etherscan.io',
+  },
+};
+
+const USDC_DECIMALS = 6;
+
+const MOCK_MODE = process.env.NODE_ENV === 'development' && 
+  (typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('mock') === '1' : false);
 
 // Public client for reading data
 export const publicClient = createPublicClient({
@@ -26,7 +42,7 @@ export function createServerWalletClient() {
 
 // USDC contract interactions
 export class USDCContract {
-  private publicClient = publicClient;
+  private publicClient: PublicClient = publicClient;
   private walletClient?: ReturnType<typeof createServerWalletClient>;
 
   constructor(private address: `0x${string}` = CONTRACTS.USDC as `0x${string}`) {
@@ -150,7 +166,7 @@ export class USDCContract {
 
 // TrustLend MVP contract interactions
 export class TrustLendContract {
-  private publicClient = publicClient;
+  private publicClient: PublicClient = publicClient;
   private walletClient?: ReturnType<typeof createServerWalletClient>;
 
   constructor(private address: `0x${string}` = CONTRACTS.MVP as `0x${string}`) {
@@ -237,7 +253,7 @@ export function createTrustLendContract(address?: `0x${string}`) {
 
 // Transaction status checker
 export class TransactionMonitor {
-  constructor(private publicClient = publicClient) {}
+  constructor(private publicClient: PublicClient = publicClient) {}
 
   async waitForTransaction(hash: `0x${string}`, timeout = 60000): Promise<{
     status: 'success' | 'reverted' | 'timeout';

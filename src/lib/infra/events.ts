@@ -322,5 +322,48 @@ export const EventHelpers = {
       timestamp: new Date()
     },
     idempotencyKey: EventManager.generateIdempotencyKey('payment', loanId, { amount, timestamp: Date.now() })
+  }),
+
+  loanLate: (loanId: string, motivo?: string): EventData => ({
+    tipo: 'ATRASO',
+    referenciaId: loanId,
+    detalhes: {
+      motivo: motivo || 'Atraso detectado automaticamente',
+      timestamp: new Date()
+    },
+    idempotencyKey: EventManager.generateIdempotencyKey('late', loanId, { motivo: motivo || 'auto' })
+  }),
+
+  scoreRecalculated: (userId: string, oldScore: number, newScore: number, scoreInputs: any): EventData => ({
+    tipo: 'SCORE_RECALC',
+    referenciaId: userId,
+    detalhes: {
+      oldScore,
+      newScore,
+      delta: newScore - oldScore,
+      scoreInputs,
+      timestamp: new Date()
+    },
+    idempotencyKey: EventManager.generateIdempotencyKey('score_update', userId, { newScore, timestamp: Date.now() })
+  }),
+
+  waterfallExecuted: (loanId: string, details: any): EventData => ({
+    tipo: 'WATERFALL',
+    referenciaId: loanId,
+    detalhes: {
+      ...details,
+      executedAt: new Date()
+    },
+    idempotencyKey: EventManager.generateIdempotencyKey('waterfall', loanId)
+  }),
+
+  stakesReleased: (loanId: string, releasedSupporters: any[]): EventData => ({
+    tipo: 'LIBERACAO',
+    referenciaId: loanId,
+    detalhes: {
+      releasedSupporters,
+      timestamp: new Date()
+    },
+    idempotencyKey: EventManager.generateIdempotencyKey('stakes_release', loanId, { count: releasedSupporters.length })
   })
 };

@@ -93,6 +93,9 @@ export default function ApoiadorDashboard({ user }: ApoiadorDashboardProps) {
       
       // Load my endorsements
       const endorsementsResponse = await fetch(`/api/endorsements?apoiadorId=${user.id}`);
+      const endorsementsData = await endorsementsResponse.json();
+      
+      if (loansResponse.ok && endorsementsResponse.ok) {
         setAvailableLoans(loansData.data || []);
         setFilteredLoans(loansData.data || []);
         setMyEndorsements(endorsementsData.data || []);

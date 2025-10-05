@@ -92,6 +92,7 @@ async function main() {
           { coberturaMin: 30, ajusteBps: 150 },
           { coberturaMin: 0, ajusteBps: 0 } // colateral integral
         ]
+      }),
       toleranciaAtraso: 30, // 30 segundos
       tempoParcelaS: 10     // 10 segundos por parcela
     }
@@ -292,7 +293,7 @@ async function main() {
 
   console.log({
     parametros: defaultParams.versao,
-    operador: operador.nome,
+    operador: admin.nome,
     provedores: provedores.map((p: any) => p.nome),
     tomadores: tomadores.map((t: any) => t.nome),
     apoiadores: apoiadores.map((a: any) => a.nome),
@@ -301,7 +302,7 @@ async function main() {
 
   console.log('🌐 Adding Sepolia testnet users...');
   
-  for (const sepoliaUser of SEPOLIA_USERS) {
+  for (const sepoliaUser of SEPOLIA_WALLETS) {
     await prisma.usuario.upsert({
       where: { carteira: sepoliaUser.carteira },
       update: {},
@@ -317,8 +318,15 @@ async function main() {
   }
 
   console.log('✅ Database seeded successfully!');
-  console.log(`Created ${users.length} users, ${loans.length} loans, ${endorsements.length} endorsements`);
-  console.log(`Added ${SEPOLIA_USERS.length} Sepolia testnet users`);
+  console.log(`Created ${users.length} users`);
+  console.log(`Added ${SEPOLIA_WALLETS.length} Sepolia testnet users`);
+}
+
+main()
+  .catch((e) => {
+    console.error(e);
+    process.exit(1);
+  })
   .finally(async () => {
     await prisma.$disconnect();
   });

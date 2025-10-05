@@ -11,6 +11,17 @@ import React from "react";
 const queryClient = new QueryClient();
 
 export default function Providers({ children }: { children: React.ReactNode }) {
+  // Handle server-side rendering where wagmiConfig might be null
+  if (!wagmiConfig) {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <UserProvider>
+          {children}
+        </UserProvider>
+      </QueryClientProvider>
+    );
+  }
+
   return (
     <WagmiProvider config={wagmiConfig}>
       <QueryClientProvider client={queryClient}>

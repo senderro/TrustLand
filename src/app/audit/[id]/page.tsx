@@ -1,29 +1,29 @@
-'use client';
+"use client";
 
-import React, { useState, useEffect } from 'react';
-import { useParams } from 'next/navigation';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { HashBadge } from '@/components/trust/HashBadge';
-import { LoadingSkeleton } from '@/components/trust/LoadingSkeleton';
-import { 
-  Shield, 
-  RefreshCw, 
-  CheckCircle, 
-  XCircle, 
+import React, { useState, useEffect } from "react";
+import { useParams } from "next/navigation";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { HashBadge } from "@/components/trust/HashBadge";
+import { LoadingSkeleton } from "@/components/trust/LoadingSkeleton";
+import {
+  Shield,
+  RefreshCw,
+  CheckCircle,
+  XCircle,
   AlertTriangle,
   ArrowLeft,
   Hash,
   FileText,
-  Clock
-} from 'lucide-react';
-import { apiClient, handleApiError } from '@/lib/api';
-import { formatRelativeTime } from '@/lib/utils/format';
-import Link from 'next/link';
+  Clock,
+} from "lucide-react";
+import { apiClient, handleApiError } from "@/lib/api";
+import { formatRelativeTime } from "@/lib/utils/format";
+import Link from "next/link";
 
 interface AuditData {
-  resourceType: 'loan' | 'decision';
+  resourceType: "loan" | "decision";
   resourceId: string;
   decision?: {
     id: string;
@@ -59,7 +59,7 @@ interface AuditData {
     detalhes: Record<string, any>;
   }>;
   auditTrail?: Array<{
-    type: 'decision' | 'event';
+    type: "decision" | "event";
     id: string;
     timestamp: string;
     sequence: number;
@@ -122,7 +122,9 @@ export default function AuditPage() {
         <Card className="border-red-200">
           <CardContent className="p-8 text-center">
             <AlertTriangle className="h-12 w-12 text-red-500 mx-auto mb-4" />
-            <h2 className="text-xl font-semibold text-red-600 mb-2">Erro ao carregar auditoria</h2>
+            <h2 className="text-xl font-semibold text-red-600 mb-2">
+              Erro ao carregar auditoria
+            </h2>
             <p className="text-red-600 mb-4">{error}</p>
             <Button onClick={loadAuditData} variant="outline">
               Tentar Novamente
@@ -138,8 +140,12 @@ export default function AuditPage() {
       <div className="container mx-auto px-4 py-8">
         <Card>
           <CardContent className="p-8 text-center">
-            <h2 className="text-xl font-semibold mb-2">Recurso de auditoria não encontrado</h2>
-            <p className="text-muted-foreground mb-4">O recurso solicitado não existe ou foi removido.</p>
+            <h2 className="text-xl font-semibold mb-2">
+              Recurso de auditoria não encontrado
+            </h2>
+            <p className="text-muted-foreground mb-4">
+              O recurso solicitado não existe ou foi removido.
+            </p>
             <Link href="/dashboard">
               <Button variant="outline">Voltar ao Dashboard</Button>
             </Link>
@@ -164,22 +170,26 @@ export default function AuditPage() {
             <h1 className="text-3xl font-bold">Auditoria</h1>
             <div className="flex items-center gap-2 mt-1">
               <Badge variant="outline">
-                {auditData.resourceType === 'loan' ? 'Empréstimo' : 'Decisão'}
+                {auditData.resourceType === "loan" ? "Empréstimo" : "Decisão"}
               </Badge>
-              <span className="text-sm text-muted-foreground">#{auditData.resourceId}</span>
+              <span className="text-sm text-muted-foreground">
+                #{auditData.resourceId}
+              </span>
             </div>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          {auditData.resourceType === 'decision' && (
-            <Button 
+          {auditData.resourceType === "decision" && (
+            <Button
               onClick={handleRecompute}
               disabled={recomputing}
               variant="outline"
               size="sm"
             >
-              <RefreshCw className={`h-4 w-4 mr-2 ${recomputing ? 'animate-spin' : ''}`} />
+              <RefreshCw
+                className={`h-4 w-4 mr-2 ${recomputing ? "animate-spin" : ""}`}
+              />
               Recomputar Hash
             </Button>
           )}
@@ -220,15 +230,21 @@ export default function AuditPage() {
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Valor</p>
-                    <p className="font-semibold">${(auditData.loan.valorTotal / 1_000_000).toFixed(2)}</p>
+                    <p className="font-semibold">
+                      ${(auditData.loan.valorTotal / 1_000_000).toFixed(2)}
+                    </p>
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Criado</p>
-                    <p className="text-sm">{formatRelativeTime(new Date(auditData.loan.createdAt))}</p>
+                    <p className="text-sm">
+                      {formatRelativeTime(new Date(auditData.loan.createdAt))}
+                    </p>
                   </div>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground mb-2">Hash das Regras</p>
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Hash das Regras
+                  </p>
                   <HashBadge hash={auditData.loan.hashRegras} copyable />
                 </div>
               </CardContent>
@@ -247,17 +263,25 @@ export default function AuditPage() {
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <p className="text-sm text-muted-foreground">ID da Decisão</p>
+                    <p className="text-sm text-muted-foreground">
+                      ID da Decisão
+                    </p>
                     <p className="font-mono text-sm">{auditData.decision.id}</p>
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Timestamp</p>
-                    <p className="text-sm">{formatRelativeTime(new Date(auditData.decision.createdAt))}</p>
+                    <p className="text-sm">
+                      {formatRelativeTime(
+                        new Date(auditData.decision.createdAt)
+                      )}
+                    </p>
                   </div>
                 </div>
 
                 <div>
-                  <p className="text-sm text-muted-foreground mb-2">Hash da Decisão</p>
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Hash da Decisão
+                  </p>
                   <HashBadge hash={auditData.decision.hashDecisao} copyable />
                 </div>
 
@@ -280,7 +304,13 @@ export default function AuditPage() {
 
           {/* Hash Verification Results */}
           {auditData.hashVerification && (
-            <Card className={auditData.hashVerification.valid ? 'border-emerald-200' : 'border-red-200'}>
+            <Card
+              className={
+                auditData.hashVerification.valid
+                  ? "border-emerald-200"
+                  : "border-red-200"
+              }
+            >
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   {auditData.hashVerification.valid ? (
@@ -290,34 +320,41 @@ export default function AuditPage() {
                   )}
                   Verificação de Integridade
                   {auditData.recomputed && (
-                    <Badge variant="outline" className="ml-2">Recomputado</Badge>
+                    <Badge variant="outline" className="ml-2">
+                      Recomputado
+                    </Badge>
                   )}
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  <div className={`p-4 rounded ${
-                    auditData.hashVerification.valid 
-                      ? 'bg-emerald-50 text-emerald-800' 
-                      : 'bg-red-50 text-red-800'
-                  }`}>
+                  <div
+                    className={`p-4 rounded ${
+                      auditData.hashVerification.valid
+                        ? "bg-emerald-50 text-emerald-800"
+                        : "bg-red-50 text-red-800"
+                    }`}
+                  >
                     <p className="font-medium">
-                      {auditData.hashVerification.valid 
-                        ? '✓ Hash verificado com sucesso - Integridade mantida'
-                        : '✗ ALERTA: Hash não confere - Possível corrupção de dados'
-                      }
+                      {auditData.hashVerification.valid
+                        ? "✓ Hash verificado com sucesso - Integridade mantida"
+                        : "✗ ALERTA: Hash não confere - Possível corrupção de dados"}
                     </p>
                   </div>
 
                   <div className="grid grid-cols-1 gap-4">
                     <div>
-                      <p className="text-sm font-medium text-muted-foreground">Hash Armazenado</p>
+                      <p className="text-sm font-medium text-muted-foreground">
+                        Hash Armazenado
+                      </p>
                       <p className="font-mono text-xs bg-muted p-2 rounded break-all">
                         {auditData.hashVerification.storedHash}
                       </p>
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-muted-foreground">Hash Computado</p>
+                      <p className="text-sm font-medium text-muted-foreground">
+                        Hash Computado
+                      </p>
                       <p className="font-mono text-xs bg-muted p-2 rounded break-all">
                         {auditData.hashVerification.computedHash}
                       </p>
@@ -342,13 +379,15 @@ export default function AuditPage() {
                   {auditData.decisions.map((decision, index) => (
                     <div key={decision.id} className="p-4 bg-muted/50 rounded">
                       <div className="flex items-center justify-between mb-2">
-                        <span className="font-medium text-sm">Decisão #{index + 1}</span>
+                        <span className="font-medium text-sm">
+                          Decisão #{index + 1}
+                        </span>
                         <span className="text-xs text-muted-foreground">
                           {formatRelativeTime(new Date(decision.createdAt))}
                         </span>
                       </div>
-                      <HashBadge 
-                        hash={decision.hashDecisao} 
+                      <HashBadge
+                        hash={decision.hashDecisao}
                         href={`/audit/${decision.id}`}
                         copyable
                       />
@@ -395,7 +434,9 @@ export default function AuditPage() {
                   {auditData.relatedEvents.map((event) => (
                     <div key={event.id} className="p-3 bg-muted/50 rounded">
                       <div className="flex items-center justify-between mb-1">
-                        <Badge variant="outline" className="text-xs">{event.tipo}</Badge>
+                        <Badge variant="outline" className="text-xs">
+                          {event.tipo}
+                        </Badge>
                         <span className="text-xs text-muted-foreground">
                           {formatRelativeTime(new Date(event.timestamp))}
                         </span>
@@ -427,14 +468,17 @@ export default function AuditPage() {
               <CardContent>
                 <div className="space-y-2">
                   {auditData.auditTrail.slice(0, 10).map((entry) => (
-                    <div key={entry.id} className="flex items-center gap-2 text-sm">
+                    <div
+                      key={entry.id}
+                      className="flex items-center gap-2 text-sm"
+                    >
                       <span className="w-6 h-6 bg-primary/10 text-primary rounded-full flex items-center justify-center text-xs font-mono">
                         {entry.sequence}
                       </span>
                       <div className="flex-1">
                         <div className="flex items-center gap-1">
                           <Badge variant="outline" className="text-xs">
-                            {entry.type === 'decision' ? 'DEC' : 'EVT'}
+                            {entry.type === "decision" ? "DEC" : "EVT"}
                           </Badge>
                           {entry.eventType && (
                             <span className="text-xs text-muted-foreground">
@@ -470,7 +514,7 @@ export default function AuditPage() {
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Tipo de Recurso:</span>
                 <span className="font-medium">
-                  {auditData.resourceType === 'loan' ? 'Empréstimo' : 'Decisão'}
+                  {auditData.resourceType === "loan" ? "Empréstimo" : "Decisão"}
                 </span>
               </div>
               <div className="flex justify-between">
@@ -480,13 +524,23 @@ export default function AuditPage() {
               {auditData.timestamp && (
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Consultado em:</span>
-                  <span>{formatRelativeTime(new Date(auditData.timestamp))}</span>
+                  <span>
+                    {formatRelativeTime(new Date(auditData.timestamp))}
+                  </span>
                 </div>
               )}
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Integridade:</span>
-                <span className={auditData.hashVerification?.valid ? 'text-emerald-600' : 'text-red-600'}>
-                  {auditData.hashVerification?.valid ? 'Verificada' : 'Não verificada'}
+                <span
+                  className={
+                    auditData.hashVerification?.valid
+                      ? "text-emerald-600"
+                      : "text-red-600"
+                  }
+                >
+                  {auditData.hashVerification?.valid
+                    ? "Verificada"
+                    : "Não verificada"}
                 </span>
               </div>
             </CardContent>

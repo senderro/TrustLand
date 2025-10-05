@@ -1,10 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
-import { createApiResponse, createApiError } from '@/lib/api';
-import { EventManager, EventHelpers } from '@/lib/infra/events';
-import { DecisionLogger } from '@/lib/infra/logger';
-import { Repository } from '@/lib/infra/repo';
-import { executeWaterfall } from '@/lib/domain/waterfall';
+import { NextRequest, NextResponse } from "next/server";
+import { PrismaClient } from "@prisma/client";
+import { createApiResponse, createApiError } from "@/lib/api";
+import { EventManager, EventHelpers } from "@/lib/infra/events";
+import { DecisionLogger } from "@/lib/infra/logger";
+import { Repository } from "@/lib/infra/repo";
+import { executeWaterfall } from "@/lib/domain/waterfall";
 
 const prisma = new PrismaClient();
 const eventManager = new EventManager(prisma);
@@ -13,24 +13,23 @@ const repository = new Repository(prisma, eventManager, decisionLogger);
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params: routeParams }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id: loanId } = params;
+    const { id: loanId } = await routeParams;
 
     // Get loan details
     const loan = await repository.getLoanById(loanId, true);
     if (!loan) {
-      return NextResponse.json(
-        createApiError('Empréstimo não encontrado'),
-        { status: 404 }
-      );
+      return NextResponse.json(createApiError("Empréstimo não encontrado"), {
+        status: 404,
+      });
     }
 
     // Check if loan can be liquidated
-    if (loan.estado !== 'INADIMPLENTE') {
+    if (loan.estado !== "INADIMPLENTE") {
       return NextResponse.json(
-        createApiError('Empréstimo não está inadimplente'),
+        createApiError("Empréstimo não está inadimplente"),
         { status: 400 }
       );
     }
@@ -38,14 +37,14 @@ export async function POST(
     // Calculate outstanding balance
     const installments = await repository.getInstallmentsForLoan(loanId);
     const outstandingBalance = installments
-      .filter(i => i.status !== 'PAGA')
+      .filter((i) => i.status !== "PAGA")
       .reduce((sum, i) => sum + i.valor, 0);
 
     // Get endorsements (stakes to be used in waterfall)
     const endorsements = loan.endossos || [];
     const stakes = endorsements
-      .filter(e => e.status === 'ATIVO')
-      .map(e => ({
+      .filter((e) => e.status === "ATIVO")
+      .map((e) => ({
         apoiadorId: e.apoiadorId,
         stakeAmount: e.valorStake,
       }));
@@ -60,18 +59,20 @@ export async function POST(
 
     // Update endorsement statuses based on waterfall results
     for (const corte of waterfallResult.cortesPorApoiador) {
-      const endorsement = endorsements.find(e => e.apoiadorId === corte.apoiadorId);
+      const endorsement = endorsements.find(
+        (e) => e.apoiadorId === corte.apoiadorId
+      );
       if (endorsement) {
-        const newStatus = corte.corte > 0 ? 'CORTADO' : 'LIBERADO';
+        const newStatus = corte.corte > 0 ? "CORTADO" : "LIBERADO";
         await repository.updateEndorsementStatus(endorsement.id, newStatus, {
-          dataLiberacao: new Date()
+          dataLiberacao: new Date(),
         });
       }
     }
 
     // Update loan status to liquidated
-    await repository.updateLoanStatus(loanId, 'LIQUIDADO_INADIMPLENCIA', {
-      dataFim: new Date()
+    await repository.updateLoanStatus(loanId, "LIQUIDADO_INADIMPLENCIA", {
+      dataFim: new Date(),
     });
 
     // Log waterfall decision for audit
@@ -82,7 +83,7 @@ export async function POST(
         {
           outstandingBalance,
           borrowerCollateral: loan.colateral || 0,
-          stakes: stakes.map(s => ({ ...s, stakeAmount: s.stakeAmount })),
+          stakes: stakes.map((s) => ({ ...s, stakeAmount: s.stakeAmount })),
           mutualFund: 1_000_000_000,
         },
         waterfallResult,
@@ -101,12 +102,12 @@ export async function POST(
 
     // Create release events for supporters
     const releasedSupporters = waterfallResult.cortesPorApoiador
-      .filter(c => c.liberado > 0)
-      .map(c => c.apoiadorId);
+      .filter((c) => c.liberado > 0)
+      .map((c) => c.apoiadorId);
 
     const cutSupporters = waterfallResult.cortesPorApoiador
-      .filter(c => c.corte > 0)
-      .map(c => c.apoiadorId);
+      .filter((c) => c.corte > 0)
+      .map((c) => c.apoiadorId);
 
     if (releasedSupporters.length > 0) {
       await eventManager.createEvent(
@@ -115,29 +116,34 @@ export async function POST(
     }
 
     // Calculate final metrics
-    const recoveryRate = outstandingBalance > 0 
-      ? (waterfallResult.totalRecuperado / outstandingBalance) * 100 
-      : 100;
+    const recoveryRate =
+      outstandingBalance > 0
+        ? (waterfallResult.totalRecuperado / outstandingBalance) * 100
+        : 100;
 
-    const shortfall = Math.max(0, outstandingBalance - waterfallResult.totalRecuperado);
+    const shortfall = Math.max(
+      0,
+      outstandingBalance - waterfallResult.totalRecuperado
+    );
 
     return NextResponse.json(
       createApiResponse({
         liquidation: {
           loanId,
-          estado: 'LIQUIDADO_INADIMPLENCIA',
+          estado: "LIQUIDADO_INADIMPLENCIA",
           outstandingBalance,
           recoveryRate,
           shortfall,
         },
         breakdown: {
           colateralUsado: waterfallResult.usadoColateral,
-          cortesApoiadores: waterfallResult.cortesPorApoiador.map(c => ({
+          cortesApoiadores: waterfallResult.cortesPorApoiador.map((c) => ({
             apoiadorId: c.apoiadorId,
             stakeOriginal: c.stakeOriginal,
             valorCortado: c.corte,
             valorLiberado: c.liberado,
-            percentualCorte: c.stakeOriginal > 0 ? (c.corte / c.stakeOriginal) * 100 : 0,
+            percentualCorte:
+              c.stakeOriginal > 0 ? (c.corte / c.stakeOriginal) * 100 : 0,
           })),
           fundoMutualistaUsado: waterfallResult.usadoFundo,
           totalRecuperado: waterfallResult.totalRecuperado,
@@ -147,14 +153,13 @@ export async function POST(
           apoiadoresLiberados: releasedSupporters.length,
           perdaTotal: shortfall,
           eficienciaRecuperacao: recoveryRate,
-        }
+        },
       })
     );
   } catch (error) {
-    console.error('Error liquidating loan:', error);
-    return NextResponse.json(
-      createApiError('Erro interno do servidor'),
-      { status: 500 }
-    );
+    console.error("Error liquidating loan:", error);
+    return NextResponse.json(createApiError("Erro interno do servidor"), {
+      status: 500,
+    });
   }
 }

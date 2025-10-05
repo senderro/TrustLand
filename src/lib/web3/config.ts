@@ -7,12 +7,12 @@ export const CONTRACTS = {
   MVP: process.env.NEXT_PUBLIC_MVP_ADDRESS || '0x0000000000000000000000000000000000000000',
 } as const;
 
-export const wagmiConfig = getDefaultConfig({
+export const wagmiConfig = typeof window !== 'undefined' ? getDefaultConfig({
   appName: 'TrustLend MVP',
   projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'c4f79cc821944d9680842e34466bfbd0', // Default demo project ID
   chains: [sepolia],
   ssr: true,
-});
+}) : null;
 
 // Chain configuration
 export const SEPOLIA_CHAIN_ID = 11155111;

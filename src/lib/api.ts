@@ -144,11 +144,72 @@ export class ApiClient {
   }
 
   // Audit
-  async getAudit(id: string) {
+  async getAudit(id: string): Promise<{
+    resourceType: 'loan' | 'decision';
+    resourceId: string;
+    decision?: {
+      id: string;
+      emprestimoId?: string;
+      inputDados: Record<string, any>;
+      resultado: Record<string, any>;
+      hashDecisao: string;
+      createdAt: string;
+    };
+    loan?: {
+      id: string;
+      valorTotal: number;
+      estado: string;
+      hashRegras: string;
+      createdAt: string;
+      tomador?: {
+        nome: string;
+        score: number;
+      };
+    };
+    decisions?: Array<{
+      id: string;
+      inputDados: Record<string, any>;
+      resultado: Record<string, any>;
+      hashDecisao: string;
+      createdAt: string;
+    }>;
+    hashVerification?: {
+      valid: boolean;
+      storedHash: string;
+      computedHash: string;
+    };
+    relatedEvents?: Array<{
+      id: string;
+      tipo: string;
+      timestamp: string;
+      detalhes: Record<string, any>;
+    }>;
+    auditTrail?: Array<{
+      type: 'decision' | 'event';
+      id: string;
+      timestamp: string;
+      sequence: number;
+      hash?: string;
+      eventType?: string;
+      data: any;
+    }>;
+    recomputed?: boolean;
+    timestamp?: string;
+  }> {
     return this.request(`/audit/${id}`);
   }
 
-  async recomputeAudit(id: string) {
+  async recomputeAudit(id: string): Promise<{
+    resourceType: 'loan' | 'decision';
+    resourceId: string;
+    hashVerification?: {
+      valid: boolean;
+      storedHash: string;
+      computedHash: string;
+    };
+    recomputed?: boolean;
+    timestamp?: string;
+  }> {
     return this.request(`/audit/${id}`, {
       method: 'POST',
       body: JSON.stringify({ action: 'recompute' }),
