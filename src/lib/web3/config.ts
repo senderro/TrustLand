@@ -9,7 +9,7 @@ export const CONTRACTS = {
 
 export const wagmiConfig = getDefaultConfig({
   appName: 'TrustLend MVP',
-  projectId: 'trustlend-mvp', // Replace with actual WalletConnect project ID
+  projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'c4f79cc821944d9680842e34466bfbd0', // Default demo project ID
   chains: [sepolia],
   ssr: true,
 });

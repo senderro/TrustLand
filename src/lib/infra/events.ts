@@ -264,3 +264,63 @@ export async function emitReleaseEvent(
     idempotencyKey: EventManager.generateIdempotencyKey('release', endorsementId)
   });
 }
+
+// Event helpers for common event creation patterns
+export const EventHelpers = {
+  loanCreated: (loanId: string, tomadorId: string, principal: number, pricing: any): EventData => ({
+    tipo: 'CRIACAO',
+    referenciaId: loanId,
+    detalhes: {
+      tomadorId,
+      principal,
+      pricing,
+      timestamp: new Date()
+    },
+    idempotencyKey: EventManager.generateIdempotencyKey('loan_create', loanId, { tomadorId, principal })
+  }),
+
+  loanEndorsed: (loanId: string, endorsementId: string, apoiadorId: string, valorStake: number): EventData => ({
+    tipo: 'APOIO',
+    referenciaId: loanId,
+    detalhes: {
+      endorsementId,
+      apoiadorId,
+      valorStake,
+      timestamp: new Date()
+    },
+    idempotencyKey: EventManager.generateIdempotencyKey('endorse', loanId, { endorsementId })
+  }),
+
+  loanApproved: (loanId: string, approvedAt: Date, conditions?: any): EventData => ({
+    tipo: 'APROVACAO',
+    referenciaId: loanId,
+    detalhes: {
+      approvedAt,
+      conditions,
+      timestamp: new Date()
+    },
+    idempotencyKey: EventManager.generateIdempotencyKey('approve', loanId)
+  }),
+
+  loanDisbursed: (loanId: string, amount: number, recipient: string): EventData => ({
+    tipo: 'DESEMBOLSO',
+    referenciaId: loanId,
+    detalhes: {
+      amount,
+      recipient,
+      timestamp: new Date()
+    },
+    idempotencyKey: EventManager.generateIdempotencyKey('disburse', loanId)
+  }),
+
+  paymentMade: (loanId: string, amount: number, installmentIndex?: number): EventData => ({
+    tipo: 'PAGAMENTO',
+    referenciaId: loanId,
+    detalhes: {
+      amount,
+      installmentIndex,
+      timestamp: new Date()
+    },
+    idempotencyKey: EventManager.generateIdempotencyKey('payment', loanId, { amount, timestamp: Date.now() })
+  })
+};
