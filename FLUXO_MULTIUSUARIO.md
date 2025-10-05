@@ -77,7 +77,7 @@ Demonstrar para a banca avaliadora um sistema financeiro onde:
 - Valor solicitado (respeitando limite do score)
 - Prazo em meses
 - Finalidade (opcional, para demonstração)
-- Colateral próprio (opcional)
+- Colateral próprio (opcion al)
 
 **Cálculo em tempo real:**
 
@@ -253,7 +253,7 @@ Valor não pago: 4,000 mUSDC
 3. **[15s]** Muda para "Apoiador", endossa o empréstimo
 4. **[20s]** Volta ao tomador, mostra taxa reduzida
 5. **[15s]** Simula pagamento, score aumenta
-6. **[15s]** Aciona inadimplência, mostra waterfall
+6. **[15s]** Aciona inadimplê ncia, mostra waterfall
 7. **[10s]** Mostra auditoria com hash verificável
 
 ---

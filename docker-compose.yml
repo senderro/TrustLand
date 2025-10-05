@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  db:
+    image: docker.io/postgres:15
+    restart: always
+    environment:
+      POSTGRES_DB: trustlend
+      POSTGRES_USER: trustlend
+      POSTGRES_PASSWORD: trustlend123
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trustlend"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  adminer:
+    image: docker.io/adminer:latest
+    restart: always
+    ports:
+      - "8090:8080"  # Changed from 8080 to avoid conflict
+    depends_on:
+      - db
+
+volumes:
+  postgres_data:

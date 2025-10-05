@@ -16,6 +16,7 @@
     "clsx": "^2.1.1",
     "lucide-react": "^0.544.0",
     "next": "15.5.4",
+    "node-fetch": "^3.3.2",
     "pino-pretty": "^13.1.1",
     "react": "19.1.0",
     "react-dom": "19.1.0",
@@ -49,8 +50,11 @@
     "lint": "eslint",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
-    "db:seed": "tsx prisma/seed.ts",
+    "db:seed": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed-sepolia-clean.ts",
     "test": "jest",
     "test:watch": "jest --watch"
+  },
+  "prisma": {
+    "seed": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed-sepolia-clean.ts"
   }
 }

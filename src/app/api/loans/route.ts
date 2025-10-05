@@ -1,21 +1,42 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { PrismaClient } from '@prisma/client';
-import { CreateLoanSchema } from '@/lib/domain/validators';
-import { createApiResponse, createApiError } from '@/lib/api';
-import { EventManager, EventHelpers } from '@/lib/infra/events';
-import { DecisionLogger } from '@/lib/infra/logger';
-import { Repository } from '@/lib/infra/repo';
-import { computeScore, calculateScoreInputsFromHistory } from '@/lib/domain/score';
-import { priceByScore } from '@/lib/domain/pricing';
-import { generateInstallments } from '@/lib/domain/servicing';
-import { EntityHasher } from '@/lib/utils/hash';
-import { LoanIdempotencyKeys } from '@/lib/infra/idempotency';
+import { prisma } from '@/lib/db';
+import crypto from 'crypto';
 
-const prisma = new PrismaClient();
-const eventManager = new EventManager(prisma);
-const decisionLogger = new DecisionLogger(prisma);
-const repository = new Repository(prisma, eventManager, decisionLogger);
+// Validation schema
+const CreateLoanSchema = z.object({
+  tomadorId: z.string(),
+  principal: z.number().positive(),
+  termDays: z.number().positive(),
+  purpose: z.string().optional(),
+  colateral: z.number().default(0),
+});
+
+// Helper functions
+function createApiResponse(data: any) {
+  return { success: true, data };
+}
+
+function createApiError(message: string, code?: string) {
+  return { success: false, error: message, code };
+}
+
+function calculateScore(baseScore: number): number {
+  // Simplified score calculation for demo
+  return Math.max(0, Math.min(100, baseScore + Math.floor(Math.random() * 10) - 5));
+}
+
+function calculateAPR(score: number): number {
+  // Score-based APR calculation (in basis points)
+  if (score >= 80) return 900;  // 9%
+  if (score >= 60) return 1400; // 14%
+  if (score >= 40) return 1800; // 18%
+  return 2200; // 22%
+}
+
+function generateHash(data: any): string {
+  return crypto.createHash('sha256').update(JSON.stringify(data)).digest('hex');
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -23,7 +44,10 @@ export async function POST(request: NextRequest) {
     const validatedData = CreateLoanSchema.parse(body);
 
     // Check if borrower exists and is active
-    const borrower = await repository.getUserById(validatedData.tomadorId);
+    const borrower = await prisma.usuario.findUnique({
+      where: { id: validatedData.tomadorId }
+    });
+
     if (!borrower) {
       return NextResponse.json(
         createApiError('Tomador não encontrado'),
@@ -45,104 +69,91 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get system parameters
-    const params = await repository.getActiveParameters();
-    if (!params) {
-      return NextResponse.json(
-        createApiError('Parâmetros do sistema não configurados'),
-        { status: 500 }
-      );
-    }
+    // Calculate score and APR
+    const currentScore = calculateScore(borrower.score);
+    const aprBps = calculateAPR(currentScore);
 
-    // Calculate borrower's current score
-    const borrowerLoans = await repository.getLoansForUser(validatedData.tomadorId, 'TOMADOR');
-    const allInstallments = await Promise.all(
-      borrowerLoans.map(loan => repository.getInstallmentsForLoan(loan.id))
-    );
-    const payments = allInstallments.flat().map(installment => ({
-      status: installment.status,
-      paidAt: installment.paidAt,
-    }));
-
-    const hasDefaulted = borrowerLoans.some(loan => 
-      ['INADIMPLENTE', 'LIQUIDADO_INADIMPLENCIA'].includes(loan.estado)
-    );
-
-    const scoreInputs = calculateScoreInputsFromHistory(
-      borrower.score,
-      payments as any,
-      hasDefaulted,
-      0, // Coverage will be calculated after endorsements
-      borrower.status === 'SOB_REVISAO'
-    );
-
-    const currentScore = computeScore(scoreInputs);
-
-    // Get pricing based on score (0% coverage initially)
-    const pricing = priceByScore(currentScore, 0);
+    // Credit limit based on score (simplified)
+    const limiteMax = currentScore >= 80 ? 10_000_000 : 
+                     currentScore >= 60 ? 5_000_000 : 
+                     currentScore >= 40 ? 3_000_000 : 2_000_000;
 
     // Validate loan amount against credit limit
-    if (validatedData.principal > pricing.limiteMax) {
+    if (validatedData.principal > limiteMax) {
       return NextResponse.json(
-        createApiError(`Valor excede o limite de crédito: ${pricing.limiteMax / 1_000_000} USDC`),
+        createApiError(`Valor excede o limite de crédito: ${limiteMax / 1_000_000} USDC`),
         { status: 400 }
       );
     }
 
     // Create hash for rules version
-    const hashRegras = EntityHasher.loan({
+    const hashRegras = generateHash({
       tomadorId: validatedData.tomadorId,
       valorTotal: validatedData.principal,
-      taxaAnualBps: pricing.aprFinalBps,
+      taxaAnualBps: aprBps,
       prazoParcelas: validatedData.termDays,
-      colateral: validatedData.colateral || 0,
+      colateral: validatedData.colateral,
+      timestamp: Date.now(),
     });
 
     // Create loan in database
-    const loan = await repository.createLoan({
-      tomadorId: validatedData.tomadorId,
-      valorTotal: validatedData.principal,
-      taxaAnualBps: pricing.aprFinalBps,
-      prazoParcelas: validatedData.termDays,
-      colateral: validatedData.colateral || 0,
-      hashRegras,
+    const loan = await prisma.emprestimo.create({
+      data: {
+        tomadorId: validatedData.tomadorId,
+        valorTotal: validatedData.principal,
+        taxaAnualBps: aprBps,
+        prazoParcelas: validatedData.termDays,
+        colateral: validatedData.colateral || 0,
+        hashRegras,
+        estado: 'PENDENTE',
+      },
     });
 
-    // Generate installment schedule
-    const installments = generateInstallments(
-      validatedData.principal,
-      pricing.aprFinalBps,
-      validatedData.termDays,
-      validatedData.termDays, // One installment per day in simulation
-      params.tempoParcelaS
-    );
+    // Generate simple installment schedule (one per day)
+    const installments = [];
+    const totalAmount = validatedData.principal + (validatedData.principal * aprBps / 10000 * validatedData.termDays / 365);
+    const installmentAmount = Math.floor(totalAmount / validatedData.termDays);
+
+    for (let i = 0; i < validatedData.termDays; i++) {
+      const dueDate = new Date();
+      dueDate.setDate(dueDate.getDate() + i + 1);
+      
+      installments.push({
+        emprestimoId: loan.id,
+        indice: i,
+        valor: i === validatedData.termDays - 1 
+          ? totalAmount - (installmentAmount * (validatedData.termDays - 1)) // Last installment gets remainder
+          : installmentAmount,
+        dueAt: dueDate,
+        status: 'ABERTA',
+      });
+    }
 
     // Create installments in database
-    await repository.createInstallments(
-      installments.map((installment, index) => ({
-        emprestimoId: loan.id,
-        indice: installment.indice,
-        valor: installment.valor,
-        dueAt: new Date(installment.dueAt),
-      }))
-    );
-
-    // Create creation event
-    const eventResult = await eventManager.createEvent(
-      EventHelpers.loanCreated(loan.id, validatedData.tomadorId, validatedData.principal, pricing)
-    );
-
-    // Log decision for audit
-    await decisionLogger.logPricingDecision(
-      loan.id,
-      currentScore,
-      0, // Initial coverage
-      pricing,
-      params.versao
-    );
+    await prisma.parcela.createMany({
+      data: installments,
+    });
 
     // Update borrower score
-    await repository.updateUserScore(validatedData.tomadorId, currentScore);
+    await prisma.usuario.update({
+      where: { id: validatedData.tomadorId },
+      data: { score: currentScore },
+    });
+
+    // Create audit event
+    await prisma.evento.create({
+      data: {
+        tipo: 'CRIACAO',
+        referenciaId: loan.id,
+        detalhes: JSON.stringify({
+          tomadorId: validatedData.tomadorId,
+          valor: validatedData.principal,
+          score: currentScore,
+          apr: aprBps,
+        }),
+        idempotencyKey: `loan_creation_${loan.id}_${Date.now()}`,
+      },
+    });
 
     return NextResponse.json(
       createApiResponse({
@@ -158,8 +169,17 @@ export async function POST(request: NextRequest) {
           createdAt: loan.createdAt,
         },
         score: currentScore,
-        pricing,
-        installments,
+        pricing: {
+          faixa: currentScore >= 80 ? 'ALTO' : currentScore >= 60 ? 'MEDIO' : 'BAIXO',
+          aprBps,
+          limiteMax,
+          exigenciaCoberturaPct: currentScore >= 80 ? 25 : currentScore >= 60 ? 50 : 100,
+        },
+        installments: installments.map(inst => ({
+          indice: inst.indice,
+          valor: inst.valor,
+          dueAt: inst.dueAt,
+        })),
         hash: hashRegras,
       }),
       { status: 201 }
@@ -211,7 +231,6 @@ export async function GET(request: NextRequest) {
         },
         parcelas: {
           select: {
-            id: true,
             indice: true,
             valor: true,
             dueAt: true,
@@ -232,8 +251,28 @@ export async function GET(request: NextRequest) {
       take: Math.min(limit, 100), // Max 100 loans
     });
 
+    // Calculate coverage and required coverage for each loan
+    const loansWithCoverage = loans.map(loan => {
+      const totalStake = loan.endossos.reduce((sum, endosso) => sum + endosso.valorStake, 0);
+      const cobertura = loan.valorTotal > 0 ? (totalStake / loan.valorTotal) * 100 : 0;
+      
+      // Calculate required coverage based on score
+      const score = loan.tomador.score;
+      let requiredCoverage = 100; // Default 100%
+      if (score >= 90) requiredCoverage = 0;
+      else if (score >= 70) requiredCoverage = 25;
+      else if (score >= 40) requiredCoverage = 50;
+      else requiredCoverage = 100;
+
+      return {
+        ...loan,
+        cobertura,
+        requiredCoverage,
+      };
+    });
+
     return NextResponse.json(
-      createApiResponse(loans)
+      createApiResponse(loansWithCoverage)
     );
   } catch (error) {
     console.error('Error fetching loans:', error);

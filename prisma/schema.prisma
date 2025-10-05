@@ -6,21 +6,27 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL") // defaults to "file:./dev.db"
+  provider = "postgresql"
+  url      = env("DATABASE_URL") // defaults to PostgreSQL connection
 }
 
 model Usuario {
   id          String         @id @default(cuid())
   nome        String
+  cpf         String?        // CPF do usuário (opcional para demo)
+  endereco    String?        // Endereço do usuário (opcional para demo) 
   carteira    String         @unique
   tipo        String         // TOMADOR | APOIADOR | OPERADOR | PROVEDOR
   score       Int            @default(50)   // 0–100
   status      String         @default("ATIVO") // ATIVO | SOB_REVISAO | BLOQUEADO
+  network     String         @default("sepolia") // sepolia | mainnet | localhost
+  isContract  Boolean        @default(false) // true se for contrato inteligente
+  lastActivity DateTime?     // última atividade on-chain
   createdAt   DateTime       @default(now())
   emprestimos Emprestimo[]   @relation("Tomador")
   endossos    Endosso[]
   flagsFraude FlagFraude[]
+  poolPositions PoolPosition[] // Para provedores de liquidez
 }
 
 // SQLite doesn't support enums, so we use String with constraints
@@ -40,6 +46,12 @@ model Emprestimo {
   colateral     Int               @default(0)
   valorPago     Int               @default(0)
   hashRegras    String
+  // Campos para integração blockchain
+  contractAddress String?         // Endereço do contrato do empréstimo
+  txHash         String?          // Hash da transação de criação
+  blockNumber    Int?             // Número do bloco
+  network        String           @default("sepolia")
+  onChainId      Int?             // ID no contrato
   parcelas      Parcela[]
   endossos      Endosso[]
   createdAt     DateTime          @default(now())
@@ -72,6 +84,10 @@ model Endosso {
   status        String            @default("PENDENTE") // PENDENTE | ATIVO | LIBERADO | CORTADO // PENDENTE até aprovação do loan
   dataBloqueio  DateTime?
   dataLiberacao DateTime?
+  // Campos blockchain
+  txHash        String?       // Hash da transação
+  blockNumber   Int?          // Número do bloco
+  onChainId     Int?          // ID no contrato
   createdAt     DateTime      @default(now())
 }
 
@@ -112,4 +128,52 @@ model LogsDeDecisao {
   resultado    String
   hashDecisao  String   @unique
   createdAt    DateTime @default(now())
+}
+
+// Novos modelos para integração blockchain
+
+model PoolPosition {
+  id          String   @id @default(cuid())
+  provedorId  String
+  provedor    Usuario  @relation(fields: [provedorId], references: [id])
+  amount      Int      // microUSDC depositado
+  shares      Int      // Shares do pool
+  depositDate DateTime @default(now())
+  status      String   @default("ATIVO") // ATIVO | RETIRADO
+  // Campos blockchain
+  txHash      String?  // Hash da transação de depósito
+  blockNumber Int?     // Número do bloco
+  withdrawTxHash String? // Hash da transação de retirada
+  withdrawDate DateTime?
+}
+
+model ContractConfig {
+  id              String   @id @default(cuid())
+  network         String   @unique // sepolia | mainnet
+  poolAddress     String?  // Endereço do contrato do pool
+  factoryAddress  String?  // Endereço do factory
+  usdcAddress     String   // Endereço do token USDC
+  rpcUrl          String   // URL do RPC
+  blockExplorer   String   // URL do block explorer
+  chainId         Int      // Chain ID da rede
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Transaction {
+  id          String   @id @default(cuid())
+  hash        String   @unique
+  blockNumber Int
+  network     String
+  type        String   // LOAN_CREATE | ENDORSEMENT | DEPOSIT | WITHDRAW | PAYMENT
+  fromAddress String
+  toAddress   String?
+  amount      Int?     // microUSDC
+  gasUsed     Int?
+  gasPrice    String?
+  status      String   @default("PENDING") // PENDING | SUCCESS | FAILED
+  referenciaId String? // ID do empréstimo/endosso relacionado
+  createdAt   DateTime @default(now())
+  confirmedAt DateTime?
 }

@@ -1,15 +1,18 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { WizardStep } from '@/components/trust/WizardStep';
-import { ScoreDial } from '@/components/trust/ScoreDial';
-import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { AlertTriangle, DollarSign, Calendar, TrendingUp } from 'lucide-react';
-import { apiClient, handleApiError } from '@/lib/api';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { AlertTriangle, DollarSign, Calendar, Target, Loader2, TrendingUp } from 'lucide-react';
+import { useUser } from '@/contexts/UserContext';
+import { AuthWrapper } from '@/components/auth/AuthWrapper';
+import { Header } from '@/components/layout/Header';
+import { WizardStep } from '@/components/ui/wizard-step';
+import { ScoreDial } from '@/components/ui/score-dial';
+import { CurrencyInput } from '@/components/ui/currency-input';
 import { formatCurrency, formatPercentage } from '@/lib/utils/format';
 
 interface LoanFormData {
@@ -37,18 +40,33 @@ interface PricingData {
 
 export default function NewLoanPage() {
   const router = useRouter();
+  const { user, isAuthenticated } = useUser();
   const [currentStep, setCurrentStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Verifica se o usuário pode criar empréstimos
+  useEffect(() => {
+    if (isAuthenticated && user && user.tipo !== 'TOMADOR') {
+      setError('Apenas usuários do tipo TOMADOR podem criar empréstimos.');
+    }
+  }, [isAuthenticated, user]);
+
   // Form data
   const [formData, setFormData] = useState<LoanFormData>({
-    tomadorId: '',
+    tomadorId: user?.id || '',
     principal: 0,
     termDays: 30,
     purpose: '',
     colateral: 0,
   });
+
+  // Atualiza tomadorId quando user carrega
+  useEffect(() => {
+    if (user?.id) {
+      setFormData(prev => ({ ...prev, tomadorId: user.id }));
+    }
+  }, [user]);
 
   // Calculated data
   const [scoreData, setScoreData] = useState<ScoreData | null>(null);
@@ -102,17 +120,29 @@ export default function NewLoanPage() {
   const createLoan = async () => {
     setIsLoading(true);
     try {
-      const response = await apiClient.createLoan({
-        tomadorId: formData.tomadorId,
-        principal: formData.principal * 1_000_000, // Convert to microUSDC
-        termDays: formData.termDays,
-        purpose: formData.purpose,
-        colateral: (formData.colateral || 0) * 1_000_000,
+      const response = await fetch('/api/loans', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          tomadorId: formData.tomadorId,
+          principal: formData.principal * 1_000_000, // Convert to microUSDC
+          termDays: formData.termDays,
+          purpose: formData.purpose,
+          colateral: (formData.colateral || 0) * 1_000_000,
+        }),
       });
+
+      const data = await response.json();
       
-      setLoanId(response.loan?.id || null);
-    } catch (err) {
-      setError(handleApiError(err));
+      if (data.success) {
+        setLoanId(data.loan?.id || null);
+      } else {
+        setError(data.error || 'Erro ao criar empréstimo');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Erro ao criar empréstimo');
     } finally {
       setIsLoading(false);
     }
@@ -156,14 +186,14 @@ export default function NewLoanPage() {
             <label htmlFor="amount" className="text-sm font-medium">
               Valor (USDC) *
             </label>
-            <Input
+            <CurrencyInput
               id="amount"
-              type="number"
-              placeholder="1000"
-              min="1"
-              max="10000"
-              value={formData.principal || ''}
-              onChange={(e) => setFormData({ ...formData, principal: parseFloat(e.target.value) || 0 })}
+              placeholder="1000.00"
+              min={1}
+              max={10000}
+              value={formData.principal}
+              onChange={(value) => setFormData({ ...formData, principal: value })}
+              currency="USDC"
             />
           </div>
 
@@ -199,13 +229,13 @@ export default function NewLoanPage() {
           <label htmlFor="collateral" className="text-sm font-medium">
             Garantia Própria (USDC)
           </label>
-          <Input
+          <CurrencyInput
             id="collateral"
-            type="number"
-            placeholder="0"
-            min="0"
-            value={formData.colateral || ''}
-            onChange={(e) => setFormData({ ...formData, colateral: parseFloat(e.target.value) || 0 })}
+            placeholder="0.00"
+            min={0}
+            value={formData.colateral || 0}
+            onChange={(value) => setFormData({ ...formData, colateral: value })}
+            currency="USDC"
           />
           <p className="text-xs text-muted-foreground">
             Valor que você deposita como garantia adicional
@@ -229,9 +259,9 @@ export default function NewLoanPage() {
       stepNumber={2}
       totalSteps={3}
       onNext={handleNext}
-      onPrevious={handlePrevious}
-      isLoading={!scoreData}
+      onPrev={handlePrevious}
       nextLabel="Criar Empréstimo"
+      nextDisabled={!scoreData}
     >
       <div className="space-y-6">
         {!scoreData ? (
@@ -326,8 +356,8 @@ export default function NewLoanPage() {
       totalSteps={3}
       onNext={handleFinish}
       nextLabel="Ver Detalhes"
-      isLoading={isLoading}
-      completed={!isLoading && !error}
+      nextDisabled={isLoading}
+      isLastStep={true}
     >
       <div className="text-center space-y-6">
         {isLoading ? (
@@ -382,9 +412,34 @@ export default function NewLoanPage() {
     </WizardStep>
   );
 
+  // Se o usuário não for TOMADOR, não pode criar empréstimos
+  if (user && user.tipo !== 'TOMADOR') {
+    return (
+      <AuthWrapper>
+        <div className="min-h-screen bg-background py-8 flex items-center justify-center">
+          <div className="text-center">
+            <AlertTriangle className="h-12 w-12 text-amber-500 mx-auto mb-4" />
+            <h2 className="text-xl font-semibold mb-2">Acesso Restrito</h2>
+            <p className="text-muted-foreground mb-4">
+              Apenas usuários do tipo TOMADOR podem criar empréstimos.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Você está logado como: <strong>{user.tipo}</strong>
+            </p>
+            <Button onClick={() => router.push('/dashboard')} className="mt-4">
+              Ir para Dashboard
+            </Button>
+          </div>
+        </div>
+      </AuthWrapper>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-background py-8">
-      <div className="container mx-auto px-4">
+    <AuthWrapper>
+      <Header />
+      <div className="min-h-screen bg-gray-50 py-8">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold mb-2">Criar Novo Empréstimo</h1>
@@ -397,7 +452,8 @@ export default function NewLoanPage() {
         {currentStep === 1 && renderStep1()}
         {currentStep === 2 && renderStep2()}
         {currentStep === 3 && renderStep3()}
+        </div>
       </div>
-    </div>
+    </AuthWrapper>
   );
 }

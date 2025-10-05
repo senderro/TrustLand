@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { CurrencyInput } from '@/components/ui/currency-input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
@@ -34,17 +35,16 @@ export function EndorseList({
   disabled = false,
   minCoverage = 50
 }: EndorseListProps) {
-  const [stakeAmount, setStakeAmount] = useState('');
+  const [stakeAmount, setStakeAmount] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleEndorse = async () => {
-    const amount = parseFloat(stakeAmount);
-    if (!amount || amount <= 0) return;
+    if (!stakeAmount || stakeAmount <= 0) return;
 
     setIsSubmitting(true);
     try {
-      await onEndorse(amount * 1_000_000); // Convert to microUSDC
-      setStakeAmount('');
+      await onEndorse(stakeAmount * 1_000_000); // Convert to microUSDC
+      setStakeAmount(0);
     } catch (error) {
       console.error('Error endorsing loan:', error);
     } finally {
@@ -157,21 +157,21 @@ export function EndorseList({
             
             <div className="flex gap-2">
               <div className="flex-1">
-                <Input
-                  type="number"
-                  placeholder="Valor em USDC"
+                <CurrencyInput
+                  placeholder="0.00"
                   value={stakeAmount}
-                  onChange={(e) => setStakeAmount(e.target.value)}
-                  min="0"
-                  step="0.1"
+                  onChange={(value) => setStakeAmount(value)}
+                  min={0}
+                  step={0.01}
                   disabled={isSubmitting}
+                  currency="USDC"
                   className="text-right"
                 />
               </div>
               
               <Button 
                 onClick={handleEndorse}
-                disabled={!stakeAmount || isSubmitting || parseFloat(stakeAmount) <= 0}
+                disabled={!stakeAmount || isSubmitting || stakeAmount <= 0}
                 size="sm"
               >
                 {isSubmitting ? (

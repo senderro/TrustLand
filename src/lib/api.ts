@@ -149,8 +149,9 @@ export class ApiClient {
   }
 
   async recomputeAudit(id: string) {
-    return this.request(`/audit/${id}?recompute=1`, {
+    return this.request(`/audit/${id}`, {
       method: 'POST',
+      body: JSON.stringify({ action: 'recompute' }),
     });
   }
 

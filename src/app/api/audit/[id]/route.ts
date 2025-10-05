@@ -1,101 +1,122 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
-import { createApiResponse, createApiError } from '@/lib/api';
-import { DecisionLogger } from '@/lib/infra/logger';
-import { EventManager } from '@/lib/infra/events';
-import { Repository } from '@/lib/infra/repo';
-import { createDeterministicHash } from '@/lib/utils/hash';
+import { prisma } from '@/lib/db';
+import crypto from 'crypto';
 
-const prisma = new PrismaClient();
-const eventManager = new EventManager(prisma);
-const decisionLogger = new DecisionLogger(prisma);
-const repository = new Repository(prisma, eventManager, decisionLogger);
+// Helper functions
+function createApiResponse(data: any) {
+  return { success: true, data };
+}
+
+function createApiError(message: string, code?: string) {
+  return { success: false, error: message, code };
+}
+
+function createDeterministicHash(data: any): string {
+  return crypto.createHash('sha256').update(JSON.stringify(data)).digest('hex');
+}
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params;
+    const { id } = await params;
     const { searchParams } = new URL(request.url);
     const recompute = searchParams.get('recompute') === '1';
 
-    // Check if ID is a loan ID or decision log ID
-    let decisionLog;
-    let loan;
-
-    // Try to find decision log by ID first
-    decisionLog = await decisionLogger.getDecisionById(id);
-
-    if (!decisionLog) {
-      // Try to find loan and its decisions
-      loan = await repository.getLoanById(id);
-      if (!loan) {
-        return NextResponse.json(
-          createApiError('Recurso não encontrado para auditoria'),
-          { status: 404 }
-        );
-      }
-
-      // Get all decisions for this loan
-      const decisions = await decisionLogger.getDecisionsForLoan(id);
-      
-      return NextResponse.json(
-        createApiResponse({
-          resourceType: 'loan',
-          resourceId: id,
-          loan: {
-            id: loan.id,
-            valorTotal: loan.valorTotal,
-            estado: loan.estado,
-            hashRegras: loan.hashRegras,
-            createdAt: loan.createdAt,
+    // Try to find loan first
+    const loan = await prisma.emprestimo.findUnique({
+      where: { id },
+      include: {
+        tomador: {
+          select: {
+            nome: true,
+            score: true,
+          }
+        },
+        parcelas: {
+          select: {
+            indice: true,
+            valor: true,
+            status: true,
+            dueAt: true,
           },
-          decisions: decisions.map(d => ({
-            id: d.id,
-            inputDados: d.inputDados,
-            resultado: d.resultado,
-            hashDecisao: d.hashDecisao,
-            createdAt: d.createdAt,
-          })),
-          auditTrail: await getAuditTrail(id),
-        })
+          orderBy: { indice: 'asc' }
+        },
+        endossos: {
+          select: {
+            valorStake: true,
+            status: true,
+            apoiador: {
+              select: {
+                nome: true,
+              }
+            }
+          }
+        }
+      }
+    });
+
+    if (!loan) {
+      return NextResponse.json(
+        createApiError('Recurso não encontrado para auditoria'),
+        { status: 404 }
       );
     }
 
-    // Handle single decision audit
-    const params = await repository.getActiveParameters();
-    let hashVerification = null;
-
-    if (recompute && params) {
-      // Recompute hash and verify
-      hashVerification = await decisionLogger.verifyDecisionHash(id, params.versao);
-    }
-
     // Get related events
-    const relatedEvents = decisionLog.emprestimoId 
-      ? await eventManager.getEventsForReference(decisionLog.emprestimoId)
-      : [];
+    const events = await prisma.evento.findMany({
+      where: { referenciaId: id },
+      orderBy: { timestamp: 'asc' },
+    });
+
+    // Calculate hash verification
+    const currentData = {
+      tomadorId: loan.tomadorId,
+      valorTotal: loan.valorTotal,
+      taxaAnualBps: loan.taxaAnualBps,
+      prazoParcelas: loan.prazoParcelas,
+      colateral: loan.colateral,
+      estado: loan.estado,
+    };
+
+    const computedHash = createDeterministicHash(currentData);
+    const hashVerification = {
+      valid: computedHash === loan.hashRegras,
+      storedHash: loan.hashRegras,
+      computedHash: computedHash,
+    };
+
+    // Build audit trail
+    const auditTrail = events.map((event, index) => ({
+      type: 'event' as const,
+      id: event.id,
+      timestamp: event.timestamp,
+      sequence: index + 1,
+      eventType: event.tipo,
+      data: event.detalhes,
+    }));
 
     return NextResponse.json(
       createApiResponse({
-        resourceType: 'decision',
+        resourceType: 'loan',
         resourceId: id,
-        decision: {
-          id: decisionLog.id,
-          emprestimoId: decisionLog.emprestimoId,
-          inputDados: decisionLog.inputDados,
-          resultado: decisionLog.resultado,
-          hashDecisao: decisionLog.hashDecisao,
-          createdAt: decisionLog.createdAt,
+        loan: {
+          id: loan.id,
+          valorTotal: loan.valorTotal,
+          estado: loan.estado,
+          hashRegras: loan.hashRegras,
+          createdAt: loan.createdAt,
+          tomador: loan.tomador,
         },
         hashVerification,
-        relatedEvents: relatedEvents.map(e => ({
+        relatedEvents: events.map(e => ({
           id: e.id,
           tipo: e.tipo,
           timestamp: e.timestamp,
           detalhes: e.detalhes
         })),
+        auditTrail,
         recomputed: recompute,
         timestamp: new Date().toISOString(),
       })
@@ -111,80 +132,69 @@ export async function GET(
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params;
-    const { searchParams } = new URL(request.url);
-    const recompute = searchParams.get('recompute') === '1';
+    const { id } = await params;
+    const body = await request.json();
+    const { action } = body;
 
-    if (!recompute) {
+    if (action !== 'recompute') {
       return NextResponse.json(
-        createApiError('Ação não especificada'),
+        createApiError('Ação não suportada'),
         { status: 400 }
       );
     }
 
-    // Get the decision log
-    const decisionLog = await decisionLogger.getDecisionById(id);
-    if (!decisionLog) {
+    // Get the loan
+    const loan = await prisma.emprestimo.findUnique({
+      where: { id }
+    });
+
+    if (!loan) {
       return NextResponse.json(
-        createApiError('Log de decisão não encontrado'),
+        createApiError('Empréstimo não encontrado'),
         { status: 404 }
       );
     }
 
-    // Get current system parameters
-    const params = await repository.getActiveParameters();
-    if (!params) {
-      return NextResponse.json(
-        createApiError('Parâmetros do sistema não encontrados'),
-        { status: 500 }
-      );
-    }
+    // Recompute hash
+    const currentData = {
+      tomadorId: loan.tomadorId,
+      valorTotal: loan.valorTotal,
+      taxaAnualBps: loan.taxaAnualBps,
+      prazoParcelas: loan.prazoParcelas,
+      colateral: loan.colateral,
+      estado: loan.estado,
+    };
 
-    // Recompute and verify hash
-    const verification = await decisionLogger.verifyDecisionHash(id, params.versao);
-    
-    // Create recomputation audit trail
-    const recomputeHash = createDeterministicHash({
-      originalDecisionId: id,
-      recomputeTimestamp: new Date().toISOString(),
-      verification,
-      systemVersion: params.versao,
-    });
+    const computedHash = createDeterministicHash(currentData);
+    const verification = {
+      valid: computedHash === loan.hashRegras,
+      storedHash: loan.hashRegras,
+      computedHash: computedHash,
+    };
 
-    // Log the recomputation itself
-    await decisionLogger.logDecision({
-      inputDados: {
-        action: 'RECOMPUTE_HASH',
-        targetDecisionId: id,
-        systemVersion: params.versao,
+    // Create audit event for recomputation
+    await prisma.evento.create({
+      data: {
+        tipo: 'RECOMPUTE_HASH',
+        referenciaId: id,
+        detalhes: JSON.stringify({
+          verification,
+          recomputeTimestamp: new Date().toISOString(),
+        }),
+        idempotencyKey: `recompute_${id}_${Date.now()}`,
       },
-      resultado: {
-        verification,
-        recomputeTimestamp: new Date().toISOString(),
-      },
-      versao: params.versao
     });
 
     return NextResponse.json(
       createApiResponse({
-        recomputation: {
-          targetDecisionId: id,
-          verification,
-          recomputeHash,
-          timestamp: new Date().toISOString(),
-          systemVersion: params.versao,
-        },
-        integrity: {
-          valid: verification.valid,
-          storedHash: verification.storedHash,
-          computedHash: verification.computedHash,
-          message: verification.valid 
-            ? 'Hash verificado com sucesso - integridade mantida'
-            : 'ALERTA: Hash não confere - possível corrupção de dados'
-        }
+        resourceType: 'loan',
+        resourceId: id,
+        hashVerification: verification,
+        recomputed: true,
+        timestamp: new Date().toISOString(),
       })
     );
   } catch (error) {
@@ -194,34 +204,4 @@ export async function POST(
       { status: 500 }
     );
   }
-}
-
-// Helper function to get complete audit trail
-async function getAuditTrail(loanId: string) {
-  const [decisions, events] = await Promise.all([
-    decisionLogger.getDecisionsForLoan(loanId),
-    eventManager.getEventsForReference(loanId)
-  ]);
-
-  // Merge and sort by timestamp
-  const auditEntries = [
-    ...decisions.map(d => ({
-      type: 'decision',
-      id: d.id,
-      timestamp: d.createdAt,
-      hash: d.hashDecisao,
-      data: { inputDados: d.inputDados, resultado: d.resultado }
-    })),
-    ...events.map(e => ({
-      type: 'event',
-      id: e.id,
-      timestamp: e.timestamp,
-      eventType: e.tipo,
-      data: e.detalhes
-    }))
-  ];
-
-  return auditEntries
-    .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
-    .map((entry, index) => ({ ...entry, sequence: index + 1 }));
 }
