@@ -44,16 +44,19 @@
     "typescript": "^5"
   },
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint",
-    "db:generate": "prisma generate",
-    "db:push": "prisma db push",
-    "db:seed": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed-sepolia-clean.ts",
-    "test": "jest",
-    "test:watch": "jest --watch"
-  },
+  "dev": "next dev",
+  "build": "npm run prisma:generate && next build",
+  "start": "next start",
+  "lint": "eslint",
+  "db:pull": "prisma db pull",
+  "db:generate": "prisma generate",
+  "db:seed": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed-sepolia-clean.ts",
+  "prisma:generate": "npx prisma generate",
+  "prisma:pull": "npx prisma db pull",
+  "test": "jest",
+  "test:watch": "jest --watch"
+}
+,
   "prisma": {
     "seed": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed-sepolia-clean.ts"
   }

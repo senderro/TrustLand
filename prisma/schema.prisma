@@ -1,123 +1,107 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL") // defaults to PostgreSQL connection
+  url      = env("DATABASE_URL")
 }
 
 model Usuario {
-  id          String         @id @default(cuid())
-  nome        String
-  cpf         String?        // CPF do usuário (opcional para demo)
-  endereco    String?        // Endereço do usuário (opcional para demo) 
-  carteira    String         @unique
-  tipo        String         // TOMADOR | APOIADOR | OPERADOR | PROVEDOR
-  score       Int            @default(50)   // 0–100
-  status      String         @default("ATIVO") // ATIVO | SOB_REVISAO | BLOQUEADO
-  network     String         @default("sepolia") // sepolia | mainnet | localhost
-  isContract  Boolean        @default(false) // true se for contrato inteligente
-  lastActivity DateTime?     // última atividade on-chain
-  createdAt   DateTime       @default(now())
-  emprestimos Emprestimo[]   @relation("Tomador")
-  endossos    Endosso[]
-  flagsFraude FlagFraude[]
-  poolPositions PoolPosition[] // Para provedores de liquidez
+  id            String         @id @default(cuid())
+  nome          String
+  cpf           String?
+  endereco      String?
+  carteira      String         @unique
+  tipo          String
+  score         Int            @default(50)
+  status        String         @default("ATIVO")
+  network       String         @default("sepolia")
+  isContract    Boolean        @default(false)
+  lastActivity  DateTime?
+  createdAt     DateTime       @default(now())
+  emprestimos   Emprestimo[]   @relation("Tomador")
+  endossos      Endosso[]
+  flagsFraude   FlagFraude[]
+  poolPositions PoolPosition[]
 }
-
-// SQLite doesn't support enums, so we use String with constraints
-// enum UsuarioTipo: TOMADOR | APOIADOR | OPERADOR | PROVEDOR
-// enum UsuarioStatus: ATIVO | SOB_REVISAO | BLOQUEADO
 
 model Emprestimo {
-  id            String            @id @default(cuid())
-  tomadorId     String
-  tomador       Usuario           @relation("Tomador", fields: [tomadorId], references: [id])
-  valorTotal    Int               // microUSDC
-  taxaAnualBps  Int               // ex. 1400 = 14% a.a.
-  prazoParcelas Int
-  estado        String            @default("PENDENTE") // PENDENTE | APROVADO | ATIVO | QUITADO | INADIMPLENTE | LIQUIDADO_INADIMPLENCIA
-  dataInicio    DateTime?
-  dataFim       DateTime?
-  colateral     Int               @default(0)
-  valorPago     Int               @default(0)
-  hashRegras    String
-  // Campos para integração blockchain
-  contractAddress String?         // Endereço do contrato do empréstimo
-  txHash         String?          // Hash da transação de criação
-  blockNumber    Int?             // Número do bloco
-  network        String           @default("sepolia")
-  onChainId      Int?             // ID no contrato
-  parcelas      Parcela[]
-  endossos      Endosso[]
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime          @updatedAt
+  id              String    @id @default(cuid())
+  tomadorId       String
+  valorTotal      Int
+  taxaAnualBps    Int
+  prazoParcelas   Int
+  estado          String    @default("PENDENTE")
+  dataInicio      DateTime?
+  dataFim         DateTime?
+  colateral       Int       @default(0)
+  valorPago       Int       @default(0)
+  hashRegras      String
+  contractAddress String?
+  txHash          String?
+  blockNumber     Int?
+  network         String    @default("sepolia")
+  onChainId       Int?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  tomador         Usuario   @relation("Tomador", fields: [tomadorId], references: [id])
+  endossos        Endosso[]
+  parcelas        Parcela[]
 }
-
-// enum EstadoEmprestimo: PENDENTE | APROVADO | ATIVO | QUITADO | INADIMPLENTE | LIQUIDADO_INADIMPLENCIA
 
 model Parcela {
   emprestimoId String
-  emprestimo   Emprestimo    @relation(fields: [emprestimoId], references: [id])
   indice       Int
-  valor        Int           // microusDC
+  valor        Int
   dueAt        DateTime
-  status        String            @default("ABERTA") // ABERTA | PAGA | ATRASADA
+  status       String     @default("ABERTA")
   paidAt       DateTime?
-  
+  emprestimo   Emprestimo @relation(fields: [emprestimoId], references: [id])
+
   @@unique([emprestimoId, indice])
 }
 
-// enum StatusParcela: ABERTA | PAGA | ATRASADA
-
 model Endosso {
-  id            String        @id @default(cuid())
+  id            String     @id @default(cuid())
   emprestimoId  String
-  emprestimo    Emprestimo    @relation(fields: [emprestimoId], references: [id])
   apoiadorId    String
-  apoiador      Usuario       @relation(fields: [apoiadorId], references: [id])
-  valorStake    Int           // microusDC
-  status        String            @default("PENDENTE") // PENDENTE | ATIVO | LIBERADO | CORTADO // PENDENTE até aprovação do loan
+  valorStake    Int
+  status        String     @default("PENDENTE")
   dataBloqueio  DateTime?
   dataLiberacao DateTime?
-  // Campos blockchain
-  txHash        String?       // Hash da transação
-  blockNumber   Int?          // Número do bloco
-  onChainId     Int?          // ID no contrato
-  createdAt     DateTime      @default(now())
+  txHash        String?
+  blockNumber   Int?
+  onChainId     Int?
+  createdAt     DateTime   @default(now())
+  apoiador      Usuario    @relation(fields: [apoiadorId], references: [id])
+  emprestimo    Emprestimo @relation(fields: [emprestimoId], references: [id])
 }
-
-// enum StatusEndosso: PENDENTE | ATIVO | LIBERADO | CORTADO
 
 model Evento {
-  id             String     @id @default(cuid())
-  tipo          String // CRIACAO | APOIO | SCORE_RECALC | APROVACAO | DESEMBOLSO | PAGAMENTO | ATRASO | DEFAULT | WATERFALL | LIBERACAO
+  id             String   @id @default(cuid())
+  tipo           String
   referenciaId   String
-  detalhes       String     // JSON
-  timestamp      DateTime   @default(now())
-  idempotencyKey String     @unique
+  detalhes       String
+  timestamp      DateTime @default(now())
+  idempotencyKey String   @unique
 }
-// enum TipoEvento: CRIACAO | APOIO | SCORE_RECALC | APROVACAO | DESEMBOLSO | PAGAMENTO | ATRASO | DEFAULT | WATERFALL | LIBERACAO
 
 model FlagFraude {
   id        String   @id @default(cuid())
   usuarioId String
-  usuario   Usuario  @relation(fields: [usuarioId], references: [id])
   tipo      String
   createdAt DateTime @default(now())
   revisado  Boolean  @default(false)
-  resultado String?  // CONFIRMADO | REVERTIDO
+  resultado String?
+  usuario   Usuario  @relation(fields: [usuarioId], references: [id])
 }
 
 model ParametrosSistema {
   versao           String   @id
-  tabelaPricing    String   // JSON (faixas/limites)
-  toleranciaAtraso Int      // em segundos simulação
-  tempoParcelaS    Int      // ex. 10s
+  tabelaPricing    String
+  toleranciaAtraso Int
+  tempoParcelaS    Int
   createdAt        DateTime @default(now())
 }
 
@@ -130,50 +114,47 @@ model LogsDeDecisao {
   createdAt    DateTime @default(now())
 }
 
-// Novos modelos para integração blockchain
-
 model PoolPosition {
-  id          String   @id @default(cuid())
-  provedorId  String
-  provedor    Usuario  @relation(fields: [provedorId], references: [id])
-  amount      Int      // microUSDC depositado
-  shares      Int      // Shares do pool
-  depositDate DateTime @default(now())
-  status      String   @default("ATIVO") // ATIVO | RETIRADO
-  // Campos blockchain
-  txHash      String?  // Hash da transação de depósito
-  blockNumber Int?     // Número do bloco
-  withdrawTxHash String? // Hash da transação de retirada
-  withdrawDate DateTime?
+  id             String    @id @default(cuid())
+  provedorId     String
+  amount         Int
+  shares         Int
+  depositDate    DateTime  @default(now())
+  status         String    @default("ATIVO")
+  txHash         String?
+  blockNumber    Int?
+  withdrawTxHash String?
+  withdrawDate   DateTime?
+  provedor       Usuario   @relation(fields: [provedorId], references: [id])
 }
 
 model ContractConfig {
-  id              String   @id @default(cuid())
-  network         String   @unique // sepolia | mainnet
-  poolAddress     String?  // Endereço do contrato do pool
-  factoryAddress  String?  // Endereço do factory
-  usdcAddress     String   // Endereço do token USDC
-  rpcUrl          String   // URL do RPC
-  blockExplorer   String   // URL do block explorer
-  chainId         Int      // Chain ID da rede
-  isActive        Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id             String   @id @default(cuid())
+  network        String   @unique
+  poolAddress    String?
+  factoryAddress String?
+  usdcAddress    String
+  rpcUrl         String
+  blockExplorer  String
+  chainId        Int
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }
 
 model Transaction {
-  id          String   @id @default(cuid())
-  hash        String   @unique
-  blockNumber Int
-  network     String
-  type        String   // LOAN_CREATE | ENDORSEMENT | DEPOSIT | WITHDRAW | PAYMENT
-  fromAddress String
-  toAddress   String?
-  amount      Int?     // microUSDC
-  gasUsed     Int?
-  gasPrice    String?
-  status      String   @default("PENDING") // PENDING | SUCCESS | FAILED
-  referenciaId String? // ID do empréstimo/endosso relacionado
-  createdAt   DateTime @default(now())
-  confirmedAt DateTime?
+  id           String    @id @default(cuid())
+  hash         String    @unique
+  blockNumber  Int
+  network      String
+  type         String
+  fromAddress  String
+  toAddress    String?
+  amount       Int?
+  gasUsed      Int?
+  gasPrice     String?
+  status       String    @default("PENDING")
+  referenciaId String?
+  createdAt    DateTime  @default(now())
+  confirmedAt  DateTime?
 }
