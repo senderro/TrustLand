@@ -1,6 +1,6 @@
 # TrustLend MVP - Plataforma de Crédito Colaborativo
 
-Demo completo de uma plataforma de crédito colaborativo com garantia social, construído com Next.js 14, TypeScript, PostgreSQL e smart contracts na Sepolia.
+Demo  completo de uma plataforma de crédito colaborativo com garantia social, construído com Next.js 14, TypeScript, PostgreSQL e smart contracts na Sepolia.
 
 ## 🚀 Características Principais
 
